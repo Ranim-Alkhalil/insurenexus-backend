@@ -152,23 +152,10 @@ router.get("/info", async (req, res) => {
     email: rows[0].email,
     nationalId: rows[0].national_id,
     type: rows[0].type,
-    phoneNum: rows[0].phone_number,
   });
 });
 
 router.get("/insuranceCompanies", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies");
   } catch (error) {
@@ -212,19 +199,6 @@ router.get("/companyServices", async (req, res) => {
 });
 //for insurance employee when creating a user
 router.get("/subscribedCompanies", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM subscribed_company");
   } catch (error) {
@@ -306,23 +280,12 @@ router.post("/addNewInsuComp", async (req, res) => {
 });
 // normal user to see his insurances
 router.get("/insurances", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   let dbRes;
+  const userID = 123;
   try {
     dbRes = await db.query(
       "SELECT * FROM user_to_insurance_services_view WHERE user_id=$1",
-      [result.user_id]
+      [userID]
     );
   } catch (error) {
     res
@@ -357,18 +320,6 @@ router.get("/serviceName", async (req, res) => {
 });
 
 router.post("/createuser", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   let dbRes;
   const {
     first_name,
@@ -407,41 +358,12 @@ router.post("/createuser", async (req, res) => {
   }
 });
 router.post("/addSubComp", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  const user_id = result.user_id;
   let dbRes;
   const { company_name, email, phoneNum, address } = req.body;
   try {
     dbRes = await db.query(
       "INSERT INTO subscribed_company (name,address,phone_number,email) VALUES ($1,$2,$3,$4)",
-      [company_name, address, phoneNum, email]
-    );
-    dbRes = await db.query(
-      "SELECT * FROM subscribed_company WHERE email=($1)",
-      [email]
-    );
-    const sub_id = dbRes.rows[0].id;
-    console.log(sub_id);
-    dbRes = await db.query(
-      "SELECT * FROM map_employees_to_insurance_companies WHERE user_id=($1)",
-      [user_id]
-    );
-    const comp_id = dbRes.rows[0].insurance_company_id;
-    console.log(comp_id);
-    dbRes = await db.query(
-      "INSERT INTO map_subscribed_companies_to_insurance_companies (subscribed_company_id,insurance_company_id) VALUES ($1,$2)",
-      [sub_id, comp_id]
+      [company_name, email, phoneNum, address]
     );
     res
       .status(201)
@@ -454,18 +376,6 @@ router.post("/addSubComp", async (req, res) => {
   }
 });
 router.post("/addEmployee", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
   const {
     first_name,
     second_name,
@@ -476,7 +386,6 @@ router.post("/addEmployee", async (req, res) => {
     company_name,
   } = req.body;
   const type = 3;
-
   //generate password and send to email
   const password = 123;
   try {
@@ -495,13 +404,11 @@ router.post("/addEmployee", async (req, res) => {
     );
     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
     const user_id = dbRes.rows[0].id;
-
     //make company name uniqe in db
     dbRes = await db.query("SELECT * FROM subscribed_company WHERE name=$1", [
       company_name,
     ]);
     const company_id = dbRes.rows[0].id;
-
     dbRes = await db.query(
       "INSERT INTO map_user_to_subscribed_company (user_id,subscribed_company_id) VALUES ($1,$2)",
       [user_id, company_id]
@@ -517,19 +424,6 @@ router.post("/addEmployee", async (req, res) => {
   }
 });
 router.get("/insuranceCompanies", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-
-  const result = await validateSessionId(sessionId);
-
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies");
   } catch (error) {
