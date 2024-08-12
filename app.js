@@ -4,25 +4,34 @@ var path = require("path");
 var cookieParser = require("cookie-parser");
 var logger = require("morgan");
 const cors = require("cors");
+const bodyParser = require("body-parser");
+
 var indexRouter = require("./routes/index");
-var usersRouter = require("./routes/users");
+var insuranceEmployeeRouter = require("./routes/insuranceEmployee");
 var userRouter = require("./routes/user");
+var managerRouter = require("./routes/manager");
+var nexusEmployeeRouter = require("./routes/nexusEmployee");
+var adminRouter = require("./routes/admin");
 
 var app = express();
 
 // view engine setup
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "jade");
-
+app.use(bodyParser.json({ limit: "50mb" }));
 app.use(logger("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
+
 app.use(cors());
 app.use("/", indexRouter);
-app.use("/users", usersRouter);
+app.use("/insuranceEmployee", insuranceEmployeeRouter);
 app.use("/user", userRouter);
+app.use("/manager", managerRouter);
+app.use("/nexusEmployee", nexusEmployeeRouter);
+app.use("/admin", adminRouter);
 
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
