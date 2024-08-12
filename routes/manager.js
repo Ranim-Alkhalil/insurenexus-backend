@@ -4,7 +4,7 @@ var db = require("../database/db");
 var generator = require("generate-password");
 const { createHash } = require("crypto");
 const { validateSessionId } = require("./sessionIdValidation");
-
+const transporter = require("./mail");
 router.post("/createuser", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -32,10 +32,10 @@ router.post("/createuser", async (req, res) => {
     symbols: true,
     length: 10,
   });
-  password = createHash("sha512").update(password).digest("base64");
+
+  let newpassword = createHash("sha256").update(password).digest("base64");
 
   try {
-    // Insert the new user
     await db.query(
       "INSERT INTO users (first_name, second_name, last_name, national_id, email, phone_number, password, type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
       [
@@ -45,7 +45,7 @@ router.post("/createuser", async (req, res) => {
         national_id,
         email,
         phone_number,
-        password,
+        newpassword,
         type,
       ]
     );
@@ -55,21 +55,19 @@ router.post("/createuser", async (req, res) => {
     );
     const companyID = dbRes.rows[0].subscribed_company_id;
 
-    // Retrieve the new user's ID
     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
     const userID = dbRes.rows[0].id;
     await db.query(
       "INSERT INTO map_user_to_subscribed_company (user_id, subscribed_company_id) VALUES ($1, $2)",
       [userID, companyID]
     );
-    // Retrieve all services for the original user
+
     dbRes = await db.query(
       "SELECT * FROM map_users_to_companies_services WHERE user_id=$1",
       [result.user_id]
     );
     const services = dbRes.rows;
 
-    // Insert each service for the new user
     for (const service of services) {
       await db.query(
         "INSERT INTO map_users_to_companies_services (user_id, company_to_service_id) VALUES ($1, $2)",
@@ -77,30 +75,25 @@ router.post("/createuser", async (req, res) => {
       );
     }
 
-    // Retrieve all user_service mappings for the new user
     dbRes = await db.query(
       "SELECT * FROM map_users_to_companies_services WHERE user_id=$1",
       [userID]
     );
     const userServices = dbRes.rows;
 
-    // Iterate through each user service and copy the subscriptions
     for (const userService of userServices) {
-      // Retrieve the original user service with the same company_to_service_id
       dbRes = await db.query(
         "SELECT * FROM map_users_to_companies_services WHERE user_id=$1 AND company_to_service_id=$2",
         [result.user_id, userService.company_to_service_id]
       );
       const originalUserService = dbRes.rows[0];
 
-      // Retrieve the subscriptions for the original user service
       dbRes = await db.query(
         "SELECT * FROM user_subscription WHERE userservice_id=$1",
         [originalUserService.id]
       );
       const subscriptions = dbRes.rows;
 
-      // Insert the subscriptions for the new user's service
       for (const subscription of subscriptions) {
         await db.query(
           "INSERT INTO user_subscription (userservice_id, subscription_started_at, subscription_end_at, active, paid, amount, source_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
@@ -111,7 +104,7 @@ router.post("/createuser", async (req, res) => {
             subscription.active,
             subscription.paid,
             subscription.amount,
-            result.user_id, // Use the new user's ID as the source_id
+            result.user_id,
           ]
         );
       }

@@ -60,7 +60,8 @@ router.post("/createuser", async (req, res) => {
     symbols: true,
     length: 10,
   });
-  let newpassword = createHash("sha512").update(password).digest("base64");
+
+  let newpassword = createHash("sha256").update(password).digest("base64");
   try {
     const dbRes = await db.query(
       "INSERT INTO users (first_name, second_name, last_name, national_id, email, phone_number, password, type) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
@@ -131,7 +132,8 @@ router.post("/addEmployee", async (req, res) => {
     symbols: true,
     length: 10,
   });
-  password = createHash("sha512").update(password).digest("base64");
+
+  let newpassword = createHash("sha256").update(password).digest("base64");
   let dbRes;
   try {
     dbRes = await db.query(
@@ -143,13 +145,13 @@ router.post("/addEmployee", async (req, res) => {
         national_id,
         email,
         phone_number,
-        password,
+        newpassword,
         type,
       ]
     );
     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
     const user_id = dbRes.rows[0].id;
-    //make company name uniqe in db
+
     dbRes = await db.query("SELECT * FROM subscribed_company WHERE name=$1", [
       company_name,
     ]);
@@ -158,6 +160,24 @@ router.post("/addEmployee", async (req, res) => {
       "INSERT INTO map_user_to_subscribed_company (user_id,subscribed_company_id) VALUES ($1,$2)",
       [user_id, company_id]
     );
+    const mailOptions = {
+      from: "insurenexus@gmail.com",
+      to: email,
+      subject: "Your Temporary Password",
+      text: `Your temporary password is: ${password}.`,
+    };
+
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+        res.status(500).send({ error: true, message: "Failed to send email" });
+      } else {
+        console.log("Email sent: " + info.response);
+        res
+          .status(201)
+          .send({ success: true, message: "User created successfully" });
+      }
+    });
     res
       .status(201)
       .send({ success: true, message: "User created successfully" });
@@ -169,7 +189,6 @@ router.post("/addEmployee", async (req, res) => {
   }
 });
 
-/////////////////////////////////////////////////////
 router.get("/subscribedCompanies", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
 
@@ -197,7 +216,7 @@ router.get("/subscribedCompanies", async (req, res) => {
 
   res.send(rows);
 });
-//////////////////////////////////////
+
 router.get("/companyParent", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
 
@@ -233,7 +252,7 @@ router.get("/companyParent", async (req, res) => {
 
   res.send(rows);
 });
-/////////////////////////////////////////////
+
 router.get("/Parent", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
 
@@ -261,7 +280,7 @@ router.get("/Parent", async (req, res) => {
 
   res.send(rows);
 });
-///////////////////////////////////////
+
 router.get("/child", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const serviceName = req.query.param1;
@@ -331,7 +350,7 @@ router.get("/companyServices", async (req, res) => {
   let rows = dbRes.rows.map((row) => row.service_name);
   res.send(rows);
 });
-////////////////////////////
+
 router.post("/addSubscription", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -383,7 +402,6 @@ router.post("/addSubscription", async (req, res) => {
       [subscriptionID, startDate, endDate, active, paid, amount, result.user_id]
     );
 
-    ///////////////////////////////////////
     dbRes = await db.query(
       "SELECT * FROM map_user_to_subscribed_company WHERE user_id=$1",
       [userID]
@@ -391,31 +409,26 @@ router.post("/addSubscription", async (req, res) => {
     if (dbRes.rows.length > 0) {
       const company_id = dbRes.rows[0].subscribed_company_id;
 
-      // Retrieve all users in the same company
       dbRes = await db.query(
         "SELECT user_id FROM map_user_to_subscribed_company WHERE subscribed_company_id=$1 AND user_id != $2",
         [company_id, userID]
       );
       const users = dbRes.rows;
 
-      // Insert the subscription for each user in the company
       for (const user of users) {
         const newUserID = user.user_id;
 
-        // Insert into map_users_to_companies_services
         dbRes = await db.query(
           "INSERT INTO map_users_to_companies_services (user_id, company_to_service_id) VALUES ($1, $2)",
           [newUserID, companyServiceID]
         );
 
-        // Get the new subscription ID
         dbRes = await db.query(
           "SELECT * FROM map_users_to_companies_services WHERE user_id=$1 AND company_to_service_id=$2",
           [newUserID, companyServiceID]
         );
         const newID = dbRes.rows[0].id;
 
-        // Insert into user_subscription
         await db.query(
           "INSERT INTO user_subscription (userservice_id, subscription_started_at, subscription_end_at, active, paid, amount, source_id) VALUES ($1, $2, $3, $4, $5, $6, $7)",
           [newID, startDate, endDate, active, paid, amount, result.user_id]
@@ -564,6 +577,42 @@ router.get("/compInsurances", async (req, res) => {
     return;
   }
 });
+router.get("/compFacilities", async (req, res) => {
+  const sessionId = req.get("SESSION_ID");
+  const result = await validateSessionId(sessionId);
+
+  if (!result.valid) {
+    res.status(401).send({
+      error: true,
+      message: "session invalid",
+      code: -2,
+    });
+    return;
+  }
+  let dbRes;
+  try {
+    dbRes = await db.query(
+      "SELECT * FROM map_employees_to_insurance_companies WHERE user_id=$1",
+      [result.user_id]
+    );
+    const company_id = dbRes.rows[0].insurance_company_id;
+    dbRes = await db.query(
+      "SELECT *  FROM company_name_to_service_name_view WHERE company_id = $1",
+      [company_id]
+    );
+    dbRes = await db.query(
+      "SELECT DISTINCT facility_name FROM company_service_facilities_view WHERE company_id=$1",
+      [company_id]
+    );
+    const facilities = dbRes.rows.map((row) => row.facility_name);
+    res.send(facilities);
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: true, message: "failed to get insurance companies" });
+    return;
+  }
+});
 router.get("/Insurances", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -654,7 +703,6 @@ router.get("/compInfo", async (req, res) => {
       company_id,
     ]);
 
-    // Assuming 'pdf' is stored as a base64 encoded string in the database
     const pdfBase64 = dbRes.rows[0].pdf;
 
     res.send({

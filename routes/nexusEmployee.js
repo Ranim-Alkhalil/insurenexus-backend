@@ -4,7 +4,7 @@ var db = require("../database/db");
 var generator = require("generate-password");
 const { createHash } = require("crypto");
 const { validateSessionId } = require("./sessionIdValidation");
-
+const transporter = require("./mail");
 router.get("/insuranceCompanies", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -83,7 +83,7 @@ router.post("/addInsuEmployee", async (req, res) => {
     symbols: true,
     length: 10,
   });
-  password = createHash("sha512").update(password).digest("base64");
+  password = createHash("sha256").update(password).digest("base64");
   let dbRes;
   try {
     dbRes = await db.query(

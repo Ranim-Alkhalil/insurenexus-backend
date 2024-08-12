@@ -5,26 +5,17 @@ var generator = require("generate-password");
 const { createHash } = require("crypto");
 const { validateSessionId } = require("./sessionIdValidation");
 var nodemailer = require("nodemailer");
-
-// var transporter = nodemailer.createTransport({
-//   host: "mail.insurancenexus.com",
-//   port: 587,
-//   secure: false, // true for 465, false for other ports
-//   auth: {
-//     user: "no-reply@mail.insurancenexus.com", // generated ethereal user
-//     pass: "ranim", // generated ethereal password
-//   },
-// });
+const transporter = require("./mail");
 
 router.post("/signin", async function (req, res, next) {
   let body = req.body;
   if (body.email == null || body.password == null)
     res.send({ error: true, message: "invalid email or password", code: -1 });
-
+  console.log(body.password);
   const hashedPassword = createHash("sha256")
     .update(body.password)
     .digest("base64");
-
+  console.log(hashedPassword);
   let dbRes;
   try {
     dbRes = await db.query(
@@ -168,6 +159,7 @@ router.get("/info", async (req, res) => {
 });
 
 router.get("/insuranceCompanies", async (req, res) => {
+  let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies");
   } catch (error) {
@@ -182,127 +174,127 @@ router.get("/insuranceCompanies", async (req, res) => {
   res.send(rows);
 });
 // for insurance employee when he create a user and want to choose service
-router.get("/companyServices", async (req, res) => {
-  // const sessionId = req.get("SESSION_ID");
-  // const email=authentication(sessionId);
-  //after auth get id of user then get insurance company id
-  const email = "musa.com";
-  let dbRes;
-  try {
-    dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
-    const userID = dbRes.rows[0].id;
-    dbRes = await db.query(
-      "SELECT * FROM map_employees_to_insurance_companies   WHERE user_id=$1",
-      [userID]
-    );
-    const companyID = dbRes.rows[0].insurance_company_id;
-    dbRes = await db.query(
-      "SELECT * FROM company_name_to_service_name_view   WHERE company_id=$1",
-      [companyID]
-    );
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to get subscribed companies" });
-    return;
-  }
-  let rows = dbRes.rows.map((row) => row.service_name);
-  res.send(rows);
-});
+// router.get("/companyServices", async (req, res) => {
+//   // const sessionId = req.get("SESSION_ID");
+//   // const email=authentication(sessionId);
+//   //after auth get id of user then get insurance company id
+//   const email = "musa.com";
+//   let dbRes;
+//   try {
+//     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
+//     const userID = dbRes.rows[0].id;
+//     dbRes = await db.query(
+//       "SELECT * FROM map_employees_to_insurance_companies   WHERE user_id=$1",
+//       [userID]
+//     );
+//     const companyID = dbRes.rows[0].insurance_company_id;
+//     dbRes = await db.query(
+//       "SELECT * FROM company_name_to_service_name_view   WHERE company_id=$1",
+//       [companyID]
+//     );
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to get subscribed companies" });
+//     return;
+//   }
+//   let rows = dbRes.rows.map((row) => row.service_name);
+//   res.send(rows);
+// });
 //for insurance employee when creating a user
-router.get("/subscribedCompanies", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
+// router.get("/subscribedCompanies", async (req, res) => {
+//   const sessionId = req.get("SESSION_ID");
 
-  const result = await validateSessionId(sessionId);
+//   const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
-  try {
-    dbRes = await db.query("SELECT * FROM subscribed_company");
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to get subscribed companies" });
-    return;
-  }
+//   if (!result.valid) {
+//     res.status(401).send({
+//       error: true,
+//       message: "session invalid",
+//       code: -2,
+//     });
+//     return;
+//   }
+//   let dbRes;
+//   try {
+//     dbRes = await db.query("SELECT * FROM subscribed_company");
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to get subscribed companies" });
+//     return;
+//   }
 
-  let rows = dbRes.rows.map((row) => row.name);
+//   let rows = dbRes.rows.map((row) => row.name);
 
-  res.send(rows);
-});
-router.post("/addNewInsuEmployee", async (req, res) => {
-  const {
-    first_name,
-    second_name,
-    last_name,
-    national_id,
-    email,
-    phone_number,
-    company_name,
-  } = req.body;
-  const type = 2;
-  //generate password and send to email
-  const password = 123;
-  try {
-    dbRes = await db.query(
-      "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [
-        first_name,
-        second_name,
-        last_name,
-        national_id,
-        email,
-        phone_number,
-        password,
-        type,
-      ]
-    );
-    dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
-    const user_id = dbRes.rows[0].id;
-    //make company name uniqe in db
-    dbRes = await db.query("SELECT * FROM insurance_companies WHERE name=$1", [
-      company_name,
-    ]);
-    const company_id = dbRes.rows[0].id;
-    dbRes = await db.query(
-      "INSERT INTO map_employees_to_insurance_companies (user_id,insurance_company_id) VALUES ($1,$2)",
-      [user_id, company_id]
-    );
-    res
-      .status(201)
-      .send({ success: true, message: "User created successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to insert into users " });
-    return;
-  }
-});
-router.post("/addNewInsuComp", async (req, res) => {
-  let dbRes;
-  const { company_name } = req.body;
-  try {
-    dbRes = await db.query(
-      "INSERT INTO insurance_companies (name) VALUES ($1)",
-      [company_name]
-    );
-    res
-      .status(201)
-      .send({ success: true, message: "company inserted successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to insert into users " });
-    return;
-  }
-});
+//   res.send(rows);
+// });
+// router.post("/addNewInsuEmployee", async (req, res) => {
+//   const {
+//     first_name,
+//     second_name,
+//     last_name,
+//     national_id,
+//     email,
+//     phone_number,
+//     company_name,
+//   } = req.body;
+//   const type = 2;
+//   //generate password and send to email
+//   const password = 123;
+//   try {
+//     dbRes = await db.query(
+//       "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+//       [
+//         first_name,
+//         second_name,
+//         last_name,
+//         national_id,
+//         email,
+//         phone_number,
+//         password,
+//         type,
+//       ]
+//     );
+//     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
+//     const user_id = dbRes.rows[0].id;
+//     //make company name uniqe in db
+//     dbRes = await db.query("SELECT * FROM insurance_companies WHERE name=$1", [
+//       company_name,
+//     ]);
+//     const company_id = dbRes.rows[0].id;
+//     dbRes = await db.query(
+//       "INSERT INTO map_employees_to_insurance_companies (user_id,insurance_company_id) VALUES ($1,$2)",
+//       [user_id, company_id]
+//     );
+//     res
+//       .status(201)
+//       .send({ success: true, message: "User created successfully" });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to insert into users " });
+//     return;
+//   }
+// });
+// router.post("/addNewInsuComp", async (req, res) => {
+//   let dbRes;
+//   const { company_name } = req.body;
+//   try {
+//     dbRes = await db.query(
+//       "INSERT INTO insurance_companies (name) VALUES ($1)",
+//       [company_name]
+//     );
+//     res
+//       .status(201)
+//       .send({ success: true, message: "company inserted successfully" });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to insert into users " });
+//     return;
+//   }
+// });
 // normal user to see his insurances
 router.get("/insurances", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
@@ -334,173 +326,173 @@ router.get("/insurances", async (req, res) => {
   res.send(rows);
 });
 
-router.get("/serviceName", async (req, res) => {
-  //will get user id
-  let dbRes;
-  const userID = 123;
-  try {
-    dbRes = await db.query(
-      "SELECT * FROM user_to_insurance_services_view WHERE user_id=$1",
-      [userID]
-    );
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to get user insurances" });
-    return;
-  }
+// router.get("/serviceName", async (req, res) => {
+//   //will get user id
+//   let dbRes;
+//   const userID = 123;
+//   try {
+//     dbRes = await db.query(
+//       "SELECT * FROM user_to_insurance_services_view WHERE user_id=$1",
+//       [userID]
+//     );
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to get user insurances" });
+//     return;
+//   }
 
-  let rows = dbRes.rows.map((row) => row.service_name);
+//   let rows = dbRes.rows.map((row) => row.service_name);
 
-  res.send(rows);
-});
+//   res.send(rows);
+// });
 
-router.post("/createuser", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
+// router.post("/createuser", async (req, res) => {
+//   const sessionId = req.get("SESSION_ID");
 
-  const result = await validateSessionId(sessionId);
+//   const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
-  const {
-    first_name,
-    second_name,
-    last_name,
-    national_id,
-    email,
-    phone_number,
-  } = req.body;
-  const type = 1;
+//   if (!result.valid) {
+//     res.status(401).send({
+//       error: true,
+//       message: "session invalid",
+//       code: -2,
+//     });
+//     return;
+//   }
+//   let dbRes;
+//   const {
+//     first_name,
+//     second_name,
+//     last_name,
+//     national_id,
+//     email,
+//     phone_number,
+//   } = req.body;
+//   const type = 1;
 
-  const password = generator.generate({
-    length: 10,
-    numbers: true,
-    symbols: true,
-  });
-  create;
-  try {
-    dbRes = await db.query(
-      "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [
-        first_name,
-        second_name,
-        last_name,
-        national_id,
-        email,
-        phone_number,
-        password,
-        type,
-      ]
-    );
+//   const password = generator.generate({
+//     length: 10,
+//     numbers: true,
+//     symbols: true,
+//   });
+//   create;
+//   try {
+//     dbRes = await db.query(
+//       "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+//       [
+//         first_name,
+//         second_name,
+//         last_name,
+//         national_id,
+//         email,
+//         phone_number,
+//         password,
+//         type,
+//       ]
+//     );
 
-    res
-      .status(201)
-      .send({ success: true, message: "User created successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to insert into users " });
-    return;
-  }
-});
+//     res
+//       .status(201)
+//       .send({ success: true, message: "User created successfully" });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to insert into users " });
+//     return;
+//   }
+// });
 
-router.post("/addEmployee", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-  const result = await validateSessionId(sessionId);
+// router.post("/addEmployee", async (req, res) => {
+//   const sessionId = req.get("SESSION_ID");
+//   const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
-  const {
-    first_name,
-    second_name,
-    last_name,
-    national_id,
-    email,
-    phone_number,
-    company_name,
-  } = req.body;
-  const type = 3;
+//   if (!result.valid) {
+//     res.status(401).send({
+//       error: true,
+//       message: "session invalid",
+//       code: -2,
+//     });
+//     return;
+//   }
+//   let dbRes;
+//   const {
+//     first_name,
+//     second_name,
+//     last_name,
+//     national_id,
+//     email,
+//     phone_number,
+//     company_name,
+//   } = req.body;
+//   const type = 3;
 
-  //generate password and send to email
-  const password = 123;
-  try {
-    dbRes = await db.query(
-      "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-      [
-        first_name,
-        second_name,
-        last_name,
-        national_id,
-        email,
-        phone_number,
-        password,
-        type,
-      ]
-    );
-    dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
-    const user_id = dbRes.rows[0].id;
+//   //generate password and send to email
+//   const password = 123;
+//   try {
+//     dbRes = await db.query(
+//       "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+//       [
+//         first_name,
+//         second_name,
+//         last_name,
+//         national_id,
+//         email,
+//         phone_number,
+//         password,
+//         type,
+//       ]
+//     );
+//     dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
+//     const user_id = dbRes.rows[0].id;
 
-    //make company name uniqe in db
-    dbRes = await db.query("SELECT * FROM subscribed_company WHERE name=$1", [
-      company_name,
-    ]);
-    const company_id = dbRes.rows[0].id;
+//     //make company name uniqe in db
+//     dbRes = await db.query("SELECT * FROM subscribed_company WHERE name=$1", [
+//       company_name,
+//     ]);
+//     const company_id = dbRes.rows[0].id;
 
-    dbRes = await db.query(
-      "INSERT INTO map_user_to_subscribed_company (user_id,subscribed_company_id) VALUES ($1,$2)",
-      [user_id, company_id]
-    );
-    res
-      .status(201)
-      .send({ success: true, message: "User created successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to insert into users " });
-    return;
-  }
-});
-router.get("/insuranceCompanies", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
+//     dbRes = await db.query(
+//       "INSERT INTO map_user_to_subscribed_company (user_id,subscribed_company_id) VALUES ($1,$2)",
+//       [user_id, company_id]
+//     );
+//     res
+//       .status(201)
+//       .send({ success: true, message: "User created successfully" });
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to insert into users " });
+//     return;
+//   }
+// });
+// router.get("/insuranceCompanies", async (req, res) => {
+//   const sessionId = req.get("SESSION_ID");
 
-  const result = await validateSessionId(sessionId);
+//   const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
-  let dbRes;
-  try {
-    dbRes = await db.query("SELECT * FROM insurance_companies");
-  } catch (error) {
-    res
-      .status(500)
-      .send({ error: true, message: "failed to get insurance companies" });
-    return;
-  }
+//   if (!result.valid) {
+//     res.status(401).send({
+//       error: true,
+//       message: "session invalid",
+//       code: -2,
+//     });
+//     return;
+//   }
+//   let dbRes;
+//   try {
+//     dbRes = await db.query("SELECT * FROM insurance_companies");
+//   } catch (error) {
+//     res
+//       .status(500)
+//       .send({ error: true, message: "failed to get insurance companies" });
+//     return;
+//   }
 
-  let rows = dbRes.rows.map((row) => row.name);
+//   let rows = dbRes.rows.map((row) => row.name);
 
-  res.send(rows);
-});
+//   res.send(rows);
+// });
 router.get("/insuranceComp", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
 
@@ -630,8 +622,6 @@ router.get("/compRate", async (req, res) => {
       rating = totalOfAnswers / numberOfReviews;
     }
 
-    console.log("this");
-    console.log(rating);
     res.send({ rating: rating });
   } catch (error) {
     res
@@ -641,18 +631,8 @@ router.get("/compRate", async (req, res) => {
   }
 });
 router.get("/companyInfo", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
   const company_name = req.query.param1;
-  const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies WHERE name=$1", [
@@ -667,18 +647,8 @@ router.get("/companyInfo", async (req, res) => {
   res.send(dbRes.rows[0]);
 });
 router.get("/compComment", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
   const company = req.query.param1;
-  const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies WHERE name=$1", [
@@ -700,18 +670,8 @@ router.get("/compComment", async (req, res) => {
   }
 });
 router.get("/compInsu", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
   const company = req.query.param1;
-  const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    res.status(401).send({
-      error: true,
-      message: "session invalid",
-      code: -2,
-    });
-    return;
-  }
   let dbRes;
   try {
     dbRes = await db.query("SELECT * FROM insurance_companies WHERE name=$1", [
@@ -787,38 +747,7 @@ router.get("/compPdf", async (req, res) => {
       .send({ error: true, message: "Failed to get insurance company logo" });
   }
 });
-router.post("/update-email", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
-  const result = await validateSessionId(sessionId);
 
-  if (!result.valid) {
-    return res.status(401).send({
-      error: true,
-      message: "Session invalid",
-      code: -2,
-    });
-  }
-
-  const { newEmail } = req.body;
-  if (!newEmail) {
-    return res
-      .status(400)
-      .send({ error: true, message: "New email is required" });
-  }
-
-  try {
-    await db.query("UPDATE users SET email=$1 WHERE id=$2", [
-      newEmail,
-      result.user_id,
-    ]);
-    res
-      .status(200)
-      .send({ success: true, message: "Email updated successfully" });
-  } catch (error) {
-    console.error("Error updating email:", error);
-    res.status(500).send({ error: true, message: "Failed to update email" });
-  }
-});
 router.post("/update-phone-number", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -843,6 +772,21 @@ router.post("/update-phone-number", async (req, res) => {
       newPhoneNumber,
       result.user_id,
     ]);
+    const mailOptions = {
+      from: "insurenexus@gmail.com",
+      to: result.email,
+      subject: "Your token for changing password",
+      text: `Your phone number is updated.`,
+    };
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+        res.status(500).send({ error: true, message: "Failed to send email" });
+      } else {
+        console.log("Email sent: " + info.response);
+        res.status(201).send({ success: true, message: " successfull" });
+      }
+    });
     res
       .status(200)
       .send({ success: true, message: "Phone number updated successfully" });
@@ -895,7 +839,21 @@ router.post("/update-password", async (req, res) => {
       newPasswordHash,
       result.user_id,
     ]);
-
+    const mailOptions = {
+      from: "insurenexus@gmail.com",
+      to: result.email,
+      subject: "Changing password",
+      text: `Your password has been updated.`,
+    };
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+        res.status(500).send({ error: true, message: "Failed to send email" });
+      } else {
+        console.log("Email sent: " + info.response);
+        res.status(201).send({ success: true, message: " successfull" });
+      }
+    });
     res
       .status(200)
       .send({ success: true, message: "Password updated successfully" });
@@ -905,8 +863,112 @@ router.post("/update-password", async (req, res) => {
   }
 });
 router.post("/forgotpass", async (req, res) => {
-  const sessionId = req.get("SESSION_ID");
+  const { email } = req.body;
+  if (!email) {
+    res.status(400).send({
+      error: true,
+      message: "Email is required",
+    });
+    return;
+  }
 
+  let dbRes;
+  try {
+    dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
+    if (dbRes.rows.length === 0) {
+      res.status(404).send({
+        error: true,
+        message: "User not found",
+      });
+      return;
+    }
+    let token = generator.generate({
+      numbers: true,
+      length: 6,
+    });
+    dbRes = await db.query(
+      "INSERT INTO password_reset_tokens (token,email) VALUES ($1,$2)",
+      [token, email]
+    );
+    const mailOptions = {
+      from: "insurenexus@gmail.com",
+      to: email,
+      subject: "Changing password",
+      text: `Your token is: ${token}.`,
+    };
+    transporter.sendMail(mailOptions, function (error, info) {
+      if (error) {
+        console.log(error);
+        res.status(500).send({ error: true, message: "Failed to send email" });
+      } else {
+        console.log("Email sent: " + info.response);
+        res.status(201).send({ success: true, message: " successfull" });
+      }
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: true, message: "failed to get insurance companies" });
+    return;
+  }
+});
+router.post("/token", async (req, res) => {
+  const { email, token } = req.body;
+
+  let dbRes;
+  try {
+    dbRes = await db.query(
+      "SELECT * FROM password_reset_tokens WHERE email=$1 AND token=$2 AND used=$3",
+      [email, token, "false"]
+    );
+    if (dbRes.rows.length === 0) {
+      res.status(404).send({
+        error: true,
+        message: "User not found",
+      });
+      return;
+    }
+
+    await db.query(
+      "UPDATE password_reset_tokens SET used=$1 WHERE email=$2 AND token=$3",
+      ["true", email, token]
+    );
+
+    res.status(200).send({
+      success: true,
+      message: "Token verified successfully",
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: true, message: "failed to get insurance companies" });
+    return;
+  }
+});
+router.post("/edit-password", async (req, res) => {
+  const { newPassword, email } = req.body;
+
+  try {
+    let password = createHash("sha256").update(newPassword).digest("base64");
+    await db.query("UPDATE users SET password=$1 WHERE email=$2", [
+      password,
+      email,
+    ]);
+
+    res.status(200).send({
+      success: true,
+      message: "Password updated successfully",
+    });
+  } catch (error) {
+    console.error("Error updating password:", error);
+    res.status(500).send({
+      error: true,
+      message: "Internal server error",
+    });
+  }
+});
+router.get("/userInsurances", async (req, res) => {
+  const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
 
   if (!result.valid) {
@@ -917,26 +979,59 @@ router.post("/forgotpass", async (req, res) => {
     });
     return;
   }
-  const { email } = req.body;
   let dbRes;
   try {
-    dbRes = await db.query("SELECT * FROM users WHERE email=$1", [email]);
-    //if length=0 send error
-    let token = generator.generate({
-      numbers: true,
-      length: 6,
-    });
     dbRes = await db.query(
-      "INSERT INTO password_reset_tokens (token,email) VALUES ($1,$2)",
-      [token, email]
-    );
-    dbRes = await db.query(
-      "SELECT DISTINCT parent_name FROM company_service_view WHERE company_id = $1",
-      [company_id]
+      "SELECT * FROM user_to_insurance_services_view WHERE user_id=$1",
+      [result.user_id]
     );
 
-    const insurances = dbRes.rows.map((row) => row.parent_name);
+    const insurances = dbRes.rows.map((row) => row.service_name);
     res.send(insurances);
+  } catch (error) {
+    res
+      .status(500)
+      .send({ error: true, message: "failed to get insurance companies" });
+    return;
+  }
+});
+router.get("/userFacilities", async (req, res) => {
+  const sessionId = req.get("SESSION_ID");
+  const insurance = req.query.param1;
+  const result = await validateSessionId(sessionId);
+
+  if (!result.valid) {
+    res.status(401).send({
+      error: true,
+      message: "session invalid",
+      code: -2,
+    });
+    return;
+  }
+  let dbRes;
+  try {
+    dbRes = await db.query(
+      "SELECT * FROM user_to_insurance_services_view WHERE user_id=$1 AND service_name=$2",
+      [result.user_id, insurance]
+    );
+    const company_name = dbRes.rows[0].company_name;
+    dbRes = await db.query(
+      "SELECT *  FROM company_service_facilities_view WHERE company_name = $1 AND service_name=$2",
+      [company_name, insurance]
+    );
+    const facilityNames = dbRes.rows.map((row) => row.facility_name);
+
+    const facilityDetails = await Promise.all(
+      facilityNames.map(async (name) => {
+        const facilityRes = await db.query(
+          "SELECT * FROM facilities WHERE name = $1",
+          [name]
+        );
+        return facilityRes.rows[0];
+      })
+    );
+
+    res.send(facilityDetails);
   } catch (error) {
     res
       .status(500)

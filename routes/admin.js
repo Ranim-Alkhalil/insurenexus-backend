@@ -4,7 +4,7 @@ var db = require("../database/db");
 var generator = require("generate-password");
 const { createHash } = require("crypto");
 const { validateSessionId } = require("./sessionIdValidation");
-
+const transporter = require("./mail");
 router.post("/addNexusEmp", async (req, res) => {
   const sessionId = req.get("SESSION_ID");
   const result = await validateSessionId(sessionId);
@@ -57,7 +57,7 @@ router.post("/addNexusEmp", async (req, res) => {
     symbols: true,
     length: 10,
   });
-  password = createHash("sha512").update(password).digest("base64");
+  password = createHash("sha256").update(password).digest("base64");
   try {
     dbRes = await db.query(
       "INSERT INTO users (first_name, second_name, last_name, national_id, email,phone_number,password,type) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
